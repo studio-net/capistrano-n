@@ -1,1 +1,1 @@
-load File.expand_path("../tasks/nvm.cap", __FILE__)
+load File.expand_path("../tasks/n.cap", __FILE__)
