@@ -1,0 +1,51 @@
+namespace :n do
+	task validate: :"n:wrapper" do
+		on release_roles(fetch(:n_roles)) do
+			n_node = fetch(:n_node)
+			if n_node.nil?
+				error "n: n_node is not set"
+				exit 1
+			end
+		end
+	end
+
+	task :map_bins do
+		SSHKit.config.default_env.merge!({ node_version: fetch(:n_node), N_PREFIX: fetch(:n_env_prefix), PATH: "#{fetch(:n_env_prefix)}/bin:$PATH" })
+
+		n_prefix = fetch(:n_prefix, -> { "#{fetch(:tmp_dir)}/#{fetch(:application)}/n-exec.sh" } )
+		fetch(:n_map_bins).each do |command|
+			SSHKit.config.command_map.prefix[command.to_sym].unshift(n_prefix)
+		end
+	end
+
+	task :wrapper do
+		on release_roles(fetch(:n_roles)) do
+			execute :mkdir, "-p", "#{fetch(:tmp_dir)}/#{fetch(:application)}/"
+			upload! StringIO.new("#!/bin/bash -e\n#{fetch(:n_path)}/bin/n #{fetch(:n_flags)} $NODE_VERSION\nexec \"$@\""), "#{fetch(:tmp_dir)}/#{fetch(:application)}/n-exec.sh"
+			execute :chmod, "+x", "#{fetch(:tmp_dir)}/#{fetch(:application)}/n-exec.sh"
+		end
+	end
+end
+
+Capistrano::DSL.stages.each do |stage|
+	after stage, "n:validate"
+	after stage, "n:map_bins"
+end
+
+namespace :load do
+	task :defaults do
+		set :n_path, -> {
+			n_path   = fetch(:n_custom_path)
+			n_path ||= if fetch(:n_type, :user) == :system
+				"/usr/local/n"
+			else
+				"$HOME/n"
+			end
+		}
+
+		set :n_roles, fetch(:n_roles, :all)
+		set :n_map_bins, %w{node npm}
+		set :n_env_prefix, -> { shared_path }
+		set :n_flags, "--quiet"
+	end
+end
